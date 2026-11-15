@@ -1,0 +1,78 @@
+# Fortnightly: bring the original creator's Skylight updates into this fork.
+#
+# Runs on the 1st and 15th of each month (14:00 UTC = midnight/1 am Sydney,
+# before the Pi's 4–7 am nightly self-update). It merges cpaczek/skylight's
+# `release` branch into this fork's `release` branch, builds to make sure
+# nothing is broken, and only then pushes. The Pi picks it up that night.
+#
+# If the creator's changes clash with our customisations, or the build fails,
+# nothing is pushed and the run fails, so GitHub emails the fork owner.
+# Run it by hand any time: Actions tab → "Sync from original Skylight" → Run workflow.
+name: Sync from original Skylight
+
+on:
+  schedule:
+    - cron: "0 14 1,15 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-from-original
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release
+          fetch-depth: 0
+
+      - name: Fetch the original project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/cpaczek/skylight.git
+          git fetch --no-tags upstream release
+
+      - name: Check for new updates
+        id: check
+        run: |
+          if git merge-base --is-ancestor upstream/release HEAD; then
+            echo "Already up to date with the original. Nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New updates from the original:"
+            git log --format='  - %ad %s' --date=short HEAD..upstream/release
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge the updates
+        if: steps.check.outputs.new == 'true'
+        run: |
+          if ! git merge --no-edit upstream/release; then
+            echo "::error::The original's updates clash with this fork's customisations. Nothing was changed. Ask Claude to merge them by hand."
+            git merge --abort
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.new == 'true'
+        with:
+          node-version: 22
+
+      - name: Build to make sure nothing broke
+        if: steps.check.outputs.new == 'true'
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Save to the fork
+        if: steps.check.outputs.new == 'true'
+        run: git push origin HEAD:release
