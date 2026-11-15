@@ -64,7 +64,7 @@ export function Control() {
     return (
       <div className="loading">
         <div className={`dot ${state.connected ? "ok" : "bad"}`} />
-        {state.connected ? "Loading config…" : "Connecting to tracker…"}
+        {state.connected ? "Loading config…" : "Connecting to Skylight…"}
       </div>
     );
   }
@@ -226,7 +226,7 @@ export function Control() {
       <header className="topbar">
         <div className="brand">
           <span className={`dot ${state.connected ? "ok" : "bad"}`} />
-          Ceiling Tracker
+          Skylight
         </div>
         <div className="stat">
           {state.status?.source ?? "—"} · {state.aircraft.length} overhead{statusMessage}
