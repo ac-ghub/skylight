@@ -3,7 +3,13 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { DEFAULT_CONFIG, mergeConfig, type Config } from "@shared/index.js";
+import {
+  DEFAULT_CONFIG,
+  bedtimeError,
+  mergeConfig,
+  type Bedtime,
+  type Config,
+} from "@shared/index.js";
 
 type Listener = (config: Config) => void;
 /** Config fields the control panel lets you point at an arbitrary host. */
@@ -40,6 +46,10 @@ function validateConfigWrite(config: Partial<Config>): void {
     if (Object.prototype.hasOwnProperty.call(config, field)) {
       validateUrlField(field, config[field]);
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "bedtime")) {
+    const error = bedtimeError(config.bedtime as Partial<Bedtime>);
+    if (error) throw new ConfigValidationError(error);
   }
 }
 

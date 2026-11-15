@@ -143,6 +143,31 @@ export function TextInput({
   );
 }
 
+/** A clock-time picker ("HH:MM", 24-hour value; the phone shows its own
+ *  12/24-hour wheel). Fires only with a complete, valid time. */
+export function TimeInput({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <input
+      className="text-input time-input"
+      type="time"
+      value={value}
+      aria-label={ariaLabel}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) onChange(v);
+      }}
+    />
+  );
+}
+
 export function Segmented<T extends string>({
   value,
   options,

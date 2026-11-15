@@ -20,6 +20,7 @@ import { buildHostMatcher, originHostname } from "./allowed-hosts.js";
 import { SfoGroundPoller } from "./sfo-ground.js";
 import { lookupAirport, lookupCity } from "./airports.js";
 import { lookupAirlineByCallsign } from "./airlines.js";
+import { scheduleShutdown, shutdownUnavailable } from "./power.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = resolve(__dirname, "../data");
@@ -186,6 +187,25 @@ async function main(): Promise<void> {
     } catch {
       res.json({ name: null });
     }
+  });
+  // Safe power-off from the control panel. Same-origin browsers only (a page
+  // on another site can't trigger it), and the body must carry an explicit
+  // confirmation so a stray request does nothing.
+  app.post("/api/system/shutdown", async (req, res) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      const host = originHostname(origin);
+      if (host === null || !hostMatcher.test(host)) {
+        return res.status(403).json({ error: "not allowed from this page" });
+      }
+    }
+    if (req.body?.confirm !== "shutdown") {
+      return res.status(400).json({ error: 'body must be {"confirm":"shutdown"}' });
+    }
+    const unavailable = await shutdownUnavailable();
+    if (unavailable) return res.status(501).json({ error: unavailable });
+    res.json({ ok: true });
+    scheduleShutdown((msg) => console.log(msg));
   });
   app.post("/api/source", (req, res) => {
     const s = req.body?.source;

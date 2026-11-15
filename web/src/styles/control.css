@@ -413,3 +413,20 @@ main {
   font-weight: 500;
   cursor: pointer;
 }
+
+/* Bedtime time pickers */
+.time-input {
+  width: 130px;
+  text-align: center;
+  color-scheme: dark;
+}
+
+/* Shut down Pi: same quiet style as reset, but neutral, with a divider */
+.reset.shutdown {
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+}
+.reset.shutdown:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

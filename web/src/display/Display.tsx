@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Config, Theme } from "@shared/index.js";
 import type { SkyBody } from "./celestial.js";
-import { DEFAULT_CONFIG, formatDistance } from "@shared/index.js";
+import { DEFAULT_CONFIG, bedtimeLevel, formatDistance } from "@shared/index.js";
 import { useStream } from "../lib/useStream.js";
 import { useAmbientMode, kioskRequested } from "../lib/useAmbientMode.js";
 import { Renderer, type Pickable } from "./renderer.js";
@@ -19,6 +19,8 @@ const CARD_OFFSET_Y = 80;
 // Mouse must move this far from mousedown before a press becomes a drag,
 // so a plain click (e.g. on the ✕ button) never gets eaten as a no-op drag.
 const DRAG_THRESHOLD_PX = 4;
+/** How long the sky takes to fade into / out of bedtime. */
+const BEDTIME_FADE_MS = 60_000;
 
 export function Display() {
   const { state, conn } = useStream("display");
@@ -33,6 +35,26 @@ export function Display() {
   // Keep the latest config in a ref so the RAF loop always reads fresh values.
   const configRef = useRef<Config>(state.config ?? DEFAULT_CONFIG);
   configRef.current = state.config ?? DEFAULT_CONFIG;
+
+  // Bedtime: 1 = normal sky, 0 = black, in between = dimmed. Re-checked every
+  // 15 s, and straight away whenever the schedule is edited.
+  const [bedLevel, setBedLevel] = useState(1);
+  const bedtimeKey = JSON.stringify(state.config?.bedtime ?? null);
+  useEffect(() => {
+    const tick = () => setBedLevel(bedtimeLevel(configRef.current.bedtime, new Date()));
+    tick();
+    const id = setInterval(tick, 15_000);
+    return () => clearInterval(id);
+  }, [bedtimeKey]);
+  // Once fully faded to black, stop drawing to rest the Pi overnight.
+  useEffect(() => {
+    if (bedLevel > 0) {
+      rendererRef.current?.setPaused(false);
+      return;
+    }
+    const id = setTimeout(() => rendererRef.current?.setPaused(true), BEDTIME_FADE_MS + 1000);
+    return () => clearTimeout(id);
+  }, [bedLevel]);
 
   // Latest ambient toggle in a ref so the keydown listener stays subscribed once.
   const ambientToggleRef = useRef(ambient.toggle);
@@ -429,6 +451,20 @@ export function Display() {
         </div>
       )}
       {!state.connected && <div className="reconnect">connecting…</div>}
+
+      {/* Bedtime veil: covers everything (sky, cards, HUD) and fades gently. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "#000",
+          opacity: 1 - bedLevel,
+          transition: `opacity ${BEDTIME_FADE_MS}ms ease`,
+          pointerEvents: "none",
+          zIndex: 50,
+        }}
+      />
       {!isKiosk && (
         <button
           type="button"

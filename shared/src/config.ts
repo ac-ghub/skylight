@@ -14,6 +14,7 @@ import type {
 import type { FovPoint } from "./aim.js";
 import { SFO_AIRPORT, type Airport } from "./airport.js";
 import { CONSTELLATIONS } from "./stars.js";
+import { DEFAULT_BEDTIME, type Bedtime } from "./bedtime.js";
 
 export type Theme = "ambient" | "telemetry" | "focus";
 export type LabelDensity = "all" | "nearestN" | "nearestOnly";
@@ -351,6 +352,9 @@ export interface Config {
   /** Add destination local time + distance-to-go to labels. */
   showRouteDetail: boolean;
 
+  // --- bedtime schedule (fade to black / dim overnight, back by itself) ---
+  bedtime: Bedtime;
+
   // --- PTZ camera tracker ---
   tracker: TrackerConfig;
 }
@@ -444,6 +448,8 @@ export const DEFAULT_CONFIG: Config = {
 
   showDestArc: true,
   showRouteDetail: true,
+
+  bedtime: DEFAULT_BEDTIME,
 
   tracker: {
     driver: "sim",
@@ -560,6 +566,7 @@ export function mergeConfig(base: Config, patch: Partial<Config>): Config {
     fonts: { ...base.fonts, ...(patch.fonts ?? {}) },
     showFields: { ...base.showFields, ...(patch.showFields ?? {}) },
     constellations: { ...base.constellations, ...(patch.constellations ?? {}) },
+    bedtime: { ...base.bedtime, ...(patch.bedtime ?? {}) },
     tracker: mergeTrackerConfig(base.tracker, patch.tracker ?? {}),
   };
 }

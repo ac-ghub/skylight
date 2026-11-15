@@ -7,7 +7,32 @@ import { geoAvailability, geoErrorMessage } from "../lib/geolocation.js";
 import { useStream } from "../lib/useStream.js";
 import { nextISSPass, type Tle } from "../display/celestial.js";
 import { labelLines } from "../display/renderer.js";
-import { ColorRow, Row, Section, Segmented, Slider, TextInput, Toggle } from "./components.js";
+import { ColorRow, Row, Section, Segmented, Slider, TextInput, TimeInput, Toggle } from "./components.js";
+import { BEDTIME_DIM_MAX, BEDTIME_DIM_MIN, isBedtime, type Bedtime } from "@shared/index.js";
+
+/** "23:00" → "11:00 pm" */
+function fmtClock(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const suffix = h < 12 ? "am" : "pm";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
+function bedtimeStatus(b: Bedtime): string {
+  if (!b.enabled) return "off · the sky stays on until you turn the projector off";
+  if (b.start === b.end) return "start and end are the same time, so it never runs";
+  return isBedtime(b, new Date())
+    ? `bedtime now · sky back at ${fmtClock(b.end)}`
+    : `sky on now · ${b.mode === "off" ? "lights out" : "dims"} at ${fmtClock(b.start)}`;
+}
+
+function phoneTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+  } catch {
+    return "";
+  }
+}
 
 function skyTimeLabel(offsetMin: number): string {
   if (offsetMin === 0) return "live";
@@ -70,6 +95,10 @@ export function Control() {
   }
 
   const set = (patch: Partial<Config>) => conn.patchConfig(patch);
+  // Every bedtime edit also records this phone's time zone, so the schedule
+  // follows the clock you're setting it by.
+  const setBedtime = (patch: Partial<Bedtime>) =>
+    conn.patchConfig({ bedtime: { ...cfg.bedtime, ...patch, timeZone: phoneTimeZone() } });
   const setField = (k: keyof ShowFields, v: boolean) =>
     conn.patchConfig({ showFields: { ...cfg.showFields, [k]: v } });
   const statusMessage = state.status?.message ? ` · ${state.status.message}` : "";
@@ -640,15 +669,97 @@ export function Control() {
           </div>
         </Section>
 
+        <Section title="Bedtime">
+          <Row label="Bedtime schedule" hint={bedtimeStatus(cfg.bedtime)}>
+            <Toggle value={cfg.bedtime.enabled} onChange={(v) => setBedtime({ enabled: v })} />
+          </Row>
+          {cfg.bedtime.enabled && (
+            <>
+              <Row label="Lights out at" indent={true}>
+                <TimeInput ariaLabel="Bedtime starts" value={cfg.bedtime.start}
+                  onChange={(v) => setBedtime({ start: v })} />
+              </Row>
+              <Row label="Sky back on at" indent={true}>
+                <TimeInput ariaLabel="Sky comes back" value={cfg.bedtime.end}
+                  onChange={(v) => setBedtime({ end: v })} />
+              </Row>
+              <Row label="At bedtime" hint="fades gently over a minute" indent={true}>
+                <Segmented value={cfg.bedtime.mode}
+                  options={[
+                    { value: "off", label: "Turn off" },
+                    { value: "dim", label: "Dim" },
+                  ]}
+                  onChange={(v) => setBedtime({ mode: v })} />
+              </Row>
+              {cfg.bedtime.mode === "dim" && (
+                <Row label="Dim level" indent={true}>
+                  <Slider id="bedtimeDim" value={cfg.bedtime.dimLevel}
+                    min={BEDTIME_DIM_MIN} max={BEDTIME_DIM_MAX} step={0.05}
+                    onChange={(v) => setBedtime({ dimLevel: v })} />
+                </Row>
+              )}
+            </>
+          )}
+        </Section>
+
         <Section title="System">
           <Row label="Anonymous usage ping" hint="once a day: a random id, version, radio or internet feed, Pi model. Never your location">
             <Toggle value={cfg.telemetry} onChange={(v) => set({ telemetry: v })} />
           </Row>
+          <ShutdownButton />
           <button className="reset" onClick={() => conn.resetConfig()}>
             Reset all to defaults
           </button>
         </Section>
       </main>
     </div>
+  );
+}
+
+/** "Shut down Pi" with a confirmation, so the Pi can be powered off safely
+ *  from the phone instead of the keyboard. */
+function ShutdownButton() {
+  const [phase, setPhase] = useState<"idle" | "busy" | "done">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const shutdown = async () => {
+    const ok = window.confirm(
+      "Shut down the Pi?\n\nThe ceiling will go dark. To turn it back on later, unplug the Pi's power and plug it back in.",
+    );
+    if (!ok) return;
+    setPhase("busy");
+    setError(null);
+    try {
+      const r = await fetch("/api/system/shutdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "shutdown" }),
+      });
+      const body = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(body.error ?? `failed (${r.status})`);
+      setPhase("done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "couldn't reach the Pi");
+      setPhase("idle");
+    }
+  };
+
+  if (phase === "done") {
+    return (
+      <Row
+        label="Shutting down…"
+        hint="safe to unplug once the green light on the Pi stops flickering (about 20 seconds)"
+      >
+        <span />
+      </Row>
+    );
+  }
+  return (
+    <>
+      <button className="reset shutdown" disabled={phase === "busy"} onClick={() => void shutdown()}>
+        {phase === "busy" ? "Shutting down…" : "Shut down Pi"}
+      </button>
+      {error && <Row label="" hint={error}><span /></Row>}
+    </>
   );
 }

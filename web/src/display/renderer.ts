@@ -218,6 +218,7 @@ export class Renderer {
   private nextFrameDue = 0;
   /** Current frame time in seconds, for animating props/rotors. */
   private frameT = 0;
+  private paused = false;
 
   // Sky layer state.
   private tles: Tle[] = [];
@@ -253,6 +254,9 @@ export class Renderer {
     setInterval(() => void this.fetchTles(), 3600_000);
     const loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
+      // Bedtime "off": the screen is fully covered, so skip drawing entirely
+      // (saves the Pi's CPU/GPU overnight).
+      if (this.paused) return;
       // Cap to maxFps via an accumulator: advance a running "due" time by whole
       // frame intervals so the cadence stays anchored to a schedule (even
       // pacing, no drift) rather than to actual draw timestamps. fps <= 0 means
@@ -272,6 +276,11 @@ export class Renderer {
       this.draw();
     };
     this.raf = requestAnimationFrame(loop);
+  }
+
+  /** Stop/resume drawing (bedtime "off"). Planes keep updating meanwhile. */
+  setPaused(paused: boolean): void {
+    this.paused = paused;
   }
 
   setHovered(id: string | null): void {
