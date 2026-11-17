@@ -116,6 +116,35 @@ export function Display() {
     rendererRef.current?.update(state.aircraft);
   }, [state.now, state.aircraft]);
 
+  // "Show on ceiling" from the phone: select the requested plane exactly as a
+  // click would (ring + info card). Retried on each snapshot until the plane
+  // is on screen; cleared when the phone clears it.
+  const focusHex = state.config?.focusHex ?? "";
+  const lastFocusRef = useRef("");
+  useEffect(() => {
+    const r = rendererRef.current;
+    if (!r) return;
+    if (!focusHex) {
+      if (lastFocusRef.current) {
+        lastFocusRef.current = "";
+        if (selected?.kind === "aircraft") {
+          setSelected(null);
+          r.setSelected(null);
+        }
+      }
+      return;
+    }
+    if (selected?.id === focusHex) {
+      lastFocusRef.current = focusHex;
+      return;
+    }
+    const hit = r.getPickable(focusHex);
+    if (!hit) return;
+    lastFocusRef.current = focusHex;
+    setSelected(hit);
+    r.setSelected(hit.id);
+  }, [focusHex, state.now]);
+
   // Source health: during an outage the renderer holds planes instead of
   // staling them out. A dropped WebSocket counts as an outage too.
   useEffect(() => {

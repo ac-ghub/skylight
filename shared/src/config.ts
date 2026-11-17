@@ -355,6 +355,10 @@ export interface Config {
   // --- bedtime schedule (fade to black / dim overnight, back by itself) ---
   bedtime: Bedtime;
 
+  /** Plane the phone asked the ceiling to highlight ("Show on ceiling"), by
+   *  ICAO hex. "" = none. The display selects it like a click would. */
+  focusHex: string;
+
   // --- PTZ camera tracker ---
   tracker: TrackerConfig;
 }
@@ -450,6 +454,8 @@ export const DEFAULT_CONFIG: Config = {
   showRouteDetail: true,
 
   bedtime: DEFAULT_BEDTIME,
+
+  focusHex: "",
 
   tracker: {
     driver: "sim",

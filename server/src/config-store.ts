@@ -47,6 +47,12 @@ function validateConfigWrite(config: Partial<Config>): void {
       validateUrlField(field, config[field]);
     }
   }
+  if (Object.prototype.hasOwnProperty.call(config, "focusHex")) {
+    const v = config.focusHex;
+    if (typeof v !== "string" || !/^[0-9a-fA-F~]{0,16}$/.test(v)) {
+      throw new ConfigValidationError("focusHex must be an aircraft hex code or empty");
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(config, "bedtime")) {
     const error = bedtimeError(config.bedtime as Partial<Bedtime>);
     if (error) throw new ConfigValidationError(error);
