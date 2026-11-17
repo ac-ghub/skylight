@@ -4,6 +4,7 @@ import type { SkyBody } from "./celestial.js";
 import { DEFAULT_CONFIG, bedtimeLevel, formatDistance } from "@shared/index.js";
 import { useStream } from "../lib/useStream.js";
 import { useAmbientMode, kioskRequested } from "../lib/useAmbientMode.js";
+import { useReloadOnUpdate } from "../lib/useReloadOnUpdate.js";
 import { Renderer, type Pickable } from "./renderer.js";
 import { PlaneCard } from "./PlaneCard.js";
 import { SatelliteCard } from "./SatelliteCard.js";
@@ -24,6 +25,7 @@ const BEDTIME_FADE_MS = 60_000;
 
 export function Display() {
   const { state, conn } = useStream("display");
+  useReloadOnUpdate(state.version);
   const ambient = useAmbientMode();
   const isKiosk = kioskRequested();
   const canvasRef = useRef<HTMLCanvasElement>(null);

@@ -1,7 +1,7 @@
 // Sky · Look · Settings tabs. Every setting from the old single-page panel
 // lives in one of these (or in a sheet), none dropped.
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ShowFields } from "@shared/index.js";
 import {
   convertAltitude, convertAltitudeToFt, round,
@@ -372,6 +372,7 @@ export function SettingsTab({ ctl, openSheet }: { ctl: Ctl; openSheet: OpenSheet
         <Row label="Anonymous usage ping" hint="Once a day: a random id, version, feed type, Pi model. Never your location">
           <Toggle value={cfg.telemetry} onChange={(v) => set({ telemetry: v })} />
         </Row>
+        <UpdateRow />
         <button className="nav-row danger" onClick={() => openSheet({ kind: "power" })}>
           <PowerIcon size={18} />
           <span className="grow">Shut down Pi</span>
@@ -383,5 +384,105 @@ export function SettingsTab({ ctl, openSheet }: { ctl: Ctl; openSheet: OpenSheet
         </button>
       </Section>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- Update now
+
+interface UpdateInfo {
+  version: string;
+  running: boolean;
+  last: string | null;
+  unavailable: string | null;
+}
+
+function friendlyLast(last: string | null): string {
+  if (!last) return "";
+  if (last.startsWith("up to date")) return "already up to date";
+  if (last.startsWith("updated to")) return last;
+  if (last.startsWith("updating")) return "updating";
+  if (last.startsWith("install/build failed")) return "last update failed, still on the previous version";
+  if (last.startsWith("fetch failed")) return "couldn't reach GitHub last time";
+  if (last.startsWith("local changes")) return "skipped: the Pi has local changes";
+  return last;
+}
+
+/** "Update now": runs the Pi's nightly update on demand. The page reloads
+ *  itself once the new version is live (useReloadOnUpdate). */
+function UpdateRow() {
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const startRef = useRef<{ last: string | null; at: number; sawRunning: boolean } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch("/api/system/update", { cache: "no-store" });
+      if (!r.ok) return;
+      const next = (await r.json()) as UpdateInfo;
+      setInfo(next);
+      const s = startRef.current;
+      if (s) {
+        if (next.running) s.sawRunning = true;
+        const finished = !next.running && (s.sawRunning || next.last !== s.last || Date.now() - s.at > 20_000);
+        if (finished) {
+          startRef.current = null;
+          setBusy(false);
+        }
+      }
+    } catch {
+      // The server restarts at the end of an update; keep polling.
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    if (!busy && !info?.running) return;
+    const id = setInterval(load, 4000);
+    return () => clearInterval(id);
+  }, [busy, info?.running, load]);
+
+  const start = async () => {
+    setError(null);
+    setBusy(true);
+    startRef.current = { last: info?.last ?? null, at: Date.now(), sawRunning: false };
+    try {
+      const r = await fetch("/api/system/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "update" }),
+      });
+      const body = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(body.error ?? `failed (${r.status})`);
+      void load();
+    } catch (err) {
+      startRef.current = null;
+      setBusy(false);
+      setError(err instanceof Error ? err.message : "couldn't reach the Pi");
+    }
+  };
+
+  const running = busy || Boolean(info?.running);
+  const hint = running
+    ? "Updating… usually 5–10 minutes. The ceiling keeps running, and this page refreshes itself when it's done."
+    : [
+        info ? `Version ${info.version}` : "Checking version…",
+        friendlyLast(info?.last ?? null),
+        "also checks every night, 4–7 am",
+      ].filter(Boolean).join(" · ");
+
+  return (
+    <>
+      <Row label="Update Skylight" hint={hint}>
+        <button className="pill-btn" disabled={running || Boolean(info?.unavailable)} onClick={() => void start()}>
+          {running ? "Updating…" : "Update now"}
+        </button>
+      </Row>
+      {(error || info?.unavailable) && (
+        <p className="row-note">{error ?? info?.unavailable}</p>
+      )}
+    </>
   );
 }

@@ -11,12 +11,14 @@ import {
 import { SheetHost, type Sheet } from "./Sheets.js";
 import { LookTab, SettingsTab, SkyTab } from "./Tabs.js";
 import { clock, shortPlace } from "./util.js";
+import { useReloadOnUpdate } from "../lib/useReloadOnUpdate.js";
 
 export type Tab = "home" | "sky" | "look" | "settings";
 export type OpenSheet = (s: Sheet) => void;
 
 export function App() {
   const { ctl, state } = useControl();
+  useReloadOnUpdate(state.version);
   const [tab, setTab] = useState<Tab>("home");
   const [sheet, setSheet] = useState<Sheet>(null);
 

@@ -34,7 +34,8 @@ export type ServerMessage =
   | { type: "config"; config: Config }
   | { type: "aircraft"; now: number; aircraft: Aircraft[] }
   | { type: "status"; status: SourceStatus }
-  | { type: "sfoGround"; at: number; aircraft: GroundAircraft[] };
+  | { type: "sfoGround"; at: number; aircraft: GroundAircraft[] }
+  | { type: "version"; version: string };
 
 /** Client -> server. */
 export type ClientMessage =

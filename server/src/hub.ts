@@ -22,6 +22,9 @@ export interface HubDeps {
   /** Browser Origin check — defends against cross-site WebSocket hijack.
    *  Receives the raw Origin header value (undefined for non-browser clients). */
   isOriginAllowed?: (origin: string | undefined) => boolean;
+  /** Running build's version, sent to each client on connect so pages can
+   *  reload once after an update restarts the server onto a new build. */
+  version?: string;
 }
 
 export class Hub {
@@ -52,6 +55,7 @@ export class Hub {
     this.clients.add(ws);
 
     // Prime the new client with current state.
+    if (this.deps.version) this.send(ws, { type: "version", version: this.deps.version });
     this.send(ws, { type: "config", config: this.deps.store.get() });
     const snap = this.deps.getSnapshot();
     this.send(ws, { type: "aircraft", now: snap.now, aircraft: snap.aircraft });

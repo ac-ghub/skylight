@@ -18,6 +18,8 @@ export interface StreamState {
   status: SourceStatus | null;
   /** SFO surface traffic snapshot (TV / stream "who's next" panel). */
   sfoGround: { at: number; aircraft: GroundAircraft[] } | null;
+  /** Server build version, sent on connect (see useReloadOnUpdate). */
+  version: string | null;
 }
 
 type Listener = (state: StreamState) => void;
@@ -35,6 +37,7 @@ export class Connection {
     aircraft: [],
     status: null,
     sfoGround: null,
+    version: null,
   };
 
   constructor(private role: "display" | "control") {}
@@ -95,6 +98,9 @@ export class Connection {
         break;
       case "sfoGround":
         this.update({ sfoGround: { at: msg.at, aircraft: msg.aircraft } });
+        break;
+      case "version":
+        this.update({ version: msg.version });
         break;
     }
   }

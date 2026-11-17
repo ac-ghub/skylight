@@ -21,6 +21,7 @@ import { SfoGroundPoller } from "./sfo-ground.js";
 import { lookupAirport, lookupCity } from "./airports.js";
 import { lookupAirlineByCallsign } from "./airlines.js";
 import { scheduleShutdown, shutdownUnavailable } from "./power.js";
+import { readVersion, startUpdate, updateStatus, updateUnavailable } from "./updates.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = resolve(__dirname, "../data");
@@ -110,7 +111,12 @@ async function main(): Promise<void> {
   app.use(express.json());
 
   const server = createServer(app);
+  // Running build's version (git hash), read once: it only changes when an
+  // update restarts this server onto a new build. Sent to every page on
+  // connect so they reload once after an update.
+  const version = await readVersion();
   const hub = new Hub(server, {
+    version,
     store,
     getSnapshot: () => poller.getSnapshot(),
     getStatus: () => poller.getStatus(),
@@ -191,13 +197,34 @@ async function main(): Promise<void> {
   // Safe power-off from the control panel. Same-origin browsers only (a page
   // on another site can't trigger it), and the body must carry an explicit
   // confirmation so a stray request does nothing.
+  const fromOtherSite = (origin: string | undefined) => {
+    if (!origin) return false;
+    const host = originHostname(origin);
+    return host === null || !hostMatcher.test(host);
+  };
+  // "Update now": same job as the nightly timer, started on demand.
+  app.get("/api/system/update", async (_req, res) => {
+    res.set("Cache-Control", "no-store").json({
+      version,
+      ...(await updateStatus()),
+      unavailable: await updateUnavailable(),
+    });
+  });
+  app.post("/api/system/update", async (req, res) => {
+    if (fromOtherSite(req.headers.origin)) return res.status(403).json({ error: "not allowed from this page" });
+    if (req.body?.confirm !== "update") {
+      return res.status(400).json({ error: 'body must be {"confirm":"update"}' });
+    }
+    const unavailable = await updateUnavailable();
+    if (unavailable) return res.status(501).json({ error: unavailable });
+    const r = await startUpdate();
+    if (!r.ok) return res.status(500).json({ error: r.error });
+    console.log("[update] update requested from the control panel");
+    res.json({ ok: true });
+  });
   app.post("/api/system/shutdown", async (req, res) => {
-    const origin = req.headers.origin;
-    if (origin) {
-      const host = originHostname(origin);
-      if (host === null || !hostMatcher.test(host)) {
-        return res.status(403).json({ error: "not allowed from this page" });
-      }
+    if (fromOtherSite(req.headers.origin)) {
+      return res.status(403).json({ error: "not allowed from this page" });
     }
     if (req.body?.confirm !== "shutdown") {
       return res.status(400).json({ error: 'body must be {"confirm":"shutdown"}' });
